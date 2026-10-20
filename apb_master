@@ -1,0 +1,105 @@
+
+`timescale 1ns/1ps
+
+module apb_master (
+    input wire pclk,
+    input wire presetn,
+    input wire transfer,
+    input wire read,
+    input wire write,
+    input wire [9:0] apb_write_paddr,
+    input wire [7:0] apb_write_data,
+    input wire [9:0] apb_read_paddr,
+    input wire pready,
+    input wire slave_pslverr,
+    input wire [7:0] prdata,
+
+    output reg psel1,
+    output reg psel2,
+    output reg penable,
+    output reg pwrite,
+    output reg [9:0] paddr,
+    output reg [7:0] pwdata,
+    output reg [7:0] apb_read_data_out
+);
+
+    localparam IDLE   = 2'b00;
+    localparam SETUP  = 2'b01;
+    localparam ACCESS = 2'b10;
+
+    reg [1:0] state;
+
+    reg [9:0] addr_reg;
+    reg [7:0] data_reg;
+    reg write_reg;
+
+    always @(posedge pclk or negedge presetn) begin
+        if (!presetn) begin
+            state <= IDLE;
+            addr_reg <= 10'h000;
+            data_reg <= 8'h00;
+            write_reg <= 1'b0;
+            apb_read_data_out <= 8'h00;
+        end
+        else begin
+            case (state)
+
+                IDLE: begin
+                    if (transfer && (read ^ write)) begin
+                        if (write) begin
+                            addr_reg <= apb_write_paddr;
+                            data_reg <= apb_write_data;
+                            write_reg <= 1'b1;
+                        end
+                        else begin
+                            addr_reg <= apb_read_paddr;
+                            data_reg <= 8'h00;
+                            write_reg <= 1'b0;
+                        end
+
+                        state <= SETUP;
+                    end
+                end
+
+                SETUP: begin
+                    state <= ACCESS;
+                end
+
+                ACCESS: begin
+                    if (pready) begin
+                        if (!write_reg && !slave_pslverr)
+                            apb_read_data_out <= prdata;
+
+                        state <= IDLE;
+                    end
+                end
+
+                default: begin
+                    state <= IDLE;
+                end
+
+            endcase
+        end
+    end
+
+    always @(*) begin
+        psel1 = 1'b0;
+        psel2 = 1'b0;
+        penable = 1'b0;
+
+        paddr = addr_reg;
+        pwdata = data_reg;
+        pwrite = write_reg;
+
+        if (state != IDLE) begin
+            if (addr_reg[9:8] == 2'b00)
+                psel1 = 1'b1;
+            else if (addr_reg[9:8] == 2'b01)
+                psel2 = 1'b1;
+        end
+
+        if (state == ACCESS)
+            penable = 1'b1;
+    end
+
+endmodule
