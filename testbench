@@ -1,0 +1,249 @@
+module apb_testbench;
+
+    reg pclk;
+    reg presetn;
+
+    reg transfer;
+    reg read;
+    reg write;
+
+    reg [9:0] apb_write_paddr;
+    reg [7:0] apb_write_data;
+    reg [9:0] apb_read_paddr;
+
+    wire pslverr;
+    wire [7:0] apb_read_data_out;
+
+    wire psel1;
+    wire psel2;
+    wire penable;
+    wire pwrite;
+
+    wire [9:0] paddr;
+    wire [7:0] pwdata;
+
+    wire pready;
+
+    wire [7:0] prdata1;
+    wire [7:0] prdata2;
+
+
+    apb_top dut (
+        .pclk(pclk),
+        .presetn(presetn),
+
+        .transfer(transfer),
+        .read(read),
+        .write(write),
+
+        .apb_write_paddr(apb_write_paddr),
+        .apb_write_data(apb_write_data),
+        .apb_read_paddr(apb_read_paddr),
+
+        .pslverr(pslverr),
+        .apb_read_data_out(apb_read_data_out),
+
+        .psel1(psel1),
+        .psel2(psel2),
+
+        .penable(penable),
+        .pwrite(pwrite),
+
+        .paddr(paddr),
+        .pwdata(pwdata),
+
+        .pready(pready),
+
+        .prdata1(prdata1),
+        .prdata2(prdata2)
+    );
+
+
+    initial begin
+        pclk = 0;
+        forever #5 pclk = ~pclk;
+    end
+
+
+    initial begin
+
+        $dumpfile("dump.vcd");
+        $dumpvars(0, apb_testbench);
+
+        presetn = 0;
+
+        transfer = 0;
+        read = 0;
+        write = 0;
+
+        apb_write_paddr = 0;
+        apb_write_data = 0;
+        apb_read_paddr = 0;
+
+
+        repeat(2) @(posedge pclk);
+
+        presetn = 1;
+
+
+        apb_write(10'h005, 8'hAA);
+        apb_read(10'h005);
+
+        apb_write(10'h010, 8'h55);
+        apb_read(10'h010);
+
+
+        apb_write(10'h105, 8'hCC);
+        apb_read(10'h105);
+
+        apb_write(10'h120, 8'h37);
+        apb_read(10'h120);
+
+
+        apb_read(10'h020);
+
+
+        apb_read(10'h205);
+
+
+        both_read_write;
+
+
+        $display("--------------------------------");
+        $display("APB TEST COMPLETE");
+        $display("--------------------------------");
+
+        $finish;
+
+    end
+
+
+    task apb_write;
+
+        input [9:0] addr;
+        input [7:0] data;
+        reg error_status;
+
+        begin
+
+            @(negedge pclk);
+
+            transfer = 1;
+            read = 0;
+            write = 1;
+
+            apb_write_paddr = addr;
+            apb_write_data = data;
+
+
+            @(posedge pclk);
+
+
+            @(negedge pclk);
+
+            transfer = 0;
+            write = 0;
+
+
+            while (!pready)
+                @(posedge pclk);
+
+            error_status = pslverr;
+
+
+            @(negedge pclk);
+
+            $display(
+                "WRITE : Address = %h, Data = %h, Error = %b",
+                addr,
+                data,
+                error_status
+            );
+
+        end
+
+    endtask
+
+
+    task apb_read;
+
+        input [9:0] addr;
+        reg error_status;
+
+        begin
+
+            @(negedge pclk);
+
+            transfer = 1;
+            read = 1;
+            write = 0;
+
+            apb_read_paddr = addr;
+
+
+            @(posedge pclk);
+
+
+            @(negedge pclk);
+
+            transfer = 0;
+            read = 0;
+
+
+            while (!pready)
+                @(posedge pclk);
+
+            error_status = pslverr;
+
+
+            @(negedge pclk);
+
+            $display(
+                "READ  : Address = %h, Data = %h, Error = %b",
+                addr,
+                apb_read_data_out,
+                error_status
+            );
+
+        end
+
+    endtask
+
+
+    task both_read_write;
+
+        begin
+
+            @(negedge pclk);
+
+            transfer = 1;
+            read = 1;
+            write = 1;
+
+            apb_read_paddr = 10'h030;
+            apb_write_paddr = 10'h030;
+            apb_write_data = 8'hFF;
+
+
+            @(posedge pclk);
+
+
+            @(negedge pclk);
+
+            transfer = 0;
+            read = 0;
+            write = 0;
+
+
+            repeat(2) @(posedge pclk);
+
+
+            $display(
+                "EDGE CASE: READ=1 and WRITE=1 -> Transaction ignored"
+            );
+
+        end
+
+    endtask
+
+endmodule
