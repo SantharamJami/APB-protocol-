@@ -1,0 +1,98 @@
+
+`timescale 1ns/1ps
+
+module apb_top (
+    input wire pclk,
+    input wire presetn,
+
+    input wire transfer,
+    input wire read,
+    input wire write,
+
+    input wire [9:0] apb_write_paddr,
+    input wire [7:0] apb_write_data,
+    input wire [9:0] apb_read_paddr,
+
+    output wire pslverr,
+    output wire [7:0] apb_read_data_out,
+
+    output wire psel1,
+    output wire psel2,
+    output wire penable,
+    output wire pwrite,
+
+    output wire [9:0] paddr,
+    output wire [7:0] pwdata,
+
+    output wire pready,
+
+    output wire [7:0] prdata1,
+    output wire [7:0] prdata2
+);
+
+    wire pready1;
+    wire pready2;
+    wire slave_pslverr;
+
+    assign slave_pslverr = 1'b0;
+
+    assign pslverr =
+        ((paddr[9:8] == 2'b10) ||
+         (paddr[9:8] == 2'b11)) &&
+         penable;
+
+    assign pready =
+        (psel1 && pready1) ||
+        (psel2 && pready2) ||
+        pslverr;
+
+    apb_master master_inst (
+        .pclk(pclk),
+        .presetn(presetn),
+        .transfer(transfer),
+        .read(read),
+        .write(write),
+        .apb_write_paddr(apb_write_paddr),
+        .apb_write_data(apb_write_data),
+        .apb_read_paddr(apb_read_paddr),
+        .pready(pready),
+        .slave_pslverr(slave_pslverr),
+        .prdata(psel1 ? prdata1 : prdata2),
+        .psel1(psel1),
+        .psel2(psel2),
+        .penable(penable),
+        .pwrite(pwrite),
+        .paddr(paddr),
+        .pwdata(pwdata),
+        .apb_read_data_out(apb_read_data_out)
+    );
+
+    apb_slave #(
+        .WAIT_CYCLES(0)
+    ) slave1_inst (
+        .pclk(pclk),
+        .presetn(presetn),
+        .psel(psel1),
+        .penable(penable),
+        .pwrite(pwrite),
+        .paddr(paddr[7:0]),
+        .pwdata(pwdata),
+        .prdata(prdata1),
+        .pready(pready1)
+    );
+
+    apb_slave #(
+        .WAIT_CYCLES(2)
+    ) slave2_inst (
+        .pclk(pclk),
+        .presetn(presetn),
+        .psel(psel2),
+        .penable(penable),
+        .pwrite(pwrite),
+        .paddr(paddr[7:0]),
+        .pwdata(pwdata),
+        .prdata(prdata2),
+        .pready(pready2)
+    );
+
+endmodule
